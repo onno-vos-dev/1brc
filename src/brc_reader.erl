@@ -1,19 +1,19 @@
 -module(brc_reader).
 
--export([start/1]).
+-export([start/2]).
 
 -define(ONE_MB, 1048576).
 -define(TWO_MB, ?ONE_MB * 2).
 
-start(Pid) ->
+start(File, Pid) ->
   spawn_link(fun() ->
-               read_loop(Pid, 0, undefined, ?TWO_MB)
+               read_loop(atom_to_list(File), Pid, 0, undefined, ?TWO_MB)
              end).
 
-read_loop(Pid, 0, undefined, Size) ->
-  {ok, FD} = prim_file:open("measurements.txt", [read, binary, raw, read_ahead]),
-  read_loop(Pid, 0, FD, Size);
-read_loop(Pid, Offset, FD, Size) ->
+read_loop(File, Pid, 0, undefined, Size) ->
+  {ok, FD} = prim_file:open(File, [read, binary, raw, read_ahead]),
+  read_loop(File, Pid, 0, FD, Size);
+read_loop(File, Pid, Offset, FD, Size) ->
   {NewOffset, OffsetSizes} = lists:foldl(fun(_, {O, Acc}) -> {O + Size, [{O, Size} | Acc]} end, {Offset, []}, lists:seq(1,5)),
   {ok, Data} = prim_file:pread(FD, lists:reverse(OffsetSizes)),
   case send_data(Data, Pid) of
@@ -21,7 +21,7 @@ read_loop(Pid, Offset, FD, Size) ->
       prim_file:close(FD),
       Pid ! done;
     ok ->
-      read_loop(Pid, NewOffset, FD, Size)
+      read_loop(File, Pid, NewOffset, FD, Size)
   end.
 
 send_data([], _Pid) -> ok;

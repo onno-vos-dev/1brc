@@ -1,11 +1,11 @@
 -module(brc).
 
--export([run/0]).
+-export([run/1]).
 
-run() ->
+run([File]) ->
   Workers = brc_workers:spawn_workers(erlang:system_info(logical_processors)),
   {Pid, Ref} = erlang:spawn_monitor(fun() -> exit({normal, brc_processor:start(Workers)}) end),
-  brc_reader:start(Pid),
+  brc_reader:start(File, Pid),
   receive
     {'DOWN', Ref, process, Pid, {normal, Result}} ->
       [ exit(P, kill) || P <- Workers ],
