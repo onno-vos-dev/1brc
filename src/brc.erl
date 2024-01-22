@@ -9,14 +9,14 @@ run([File]) ->
   receive
     {'DOWN', Ref, process, Pid, {normal, Result}} ->
       [ exit(P, kill) || P <- Workers ],
-      format_output(Result);
-      %% ok;
+      io:format("~ts~n", [format_output(Result)]);
     {'DOWN', Ref, process, Pid, Reason} ->
       error({worker_died, Reason})
-  end.
+    end.
 
 format_output(Map) ->
-  Calculated = maps:fold(fun(K, {Min, Max, MeasurementsAcc, N}, A) -> [{K, {round_back(Min), round_back(Max), round_back(MeasurementsAcc / N)}} | A] end, [], Map), lists:sort(Calculated).
+  Fmts = lists:map(fun({K, {Min, Max, MeasurementsAcc, N}}) -> io_lib:format("~ts=~p/~p/~p", [K, round_back(Min), round_back(Max), round_back(MeasurementsAcc / N)]) end, maps:to_list(Map)),
+  "{" ++ lists:join(", ", Fmts) ++ "}".
 
 round_back(IntFloat) ->
   list_to_float(io_lib:format("~.1f", [IntFloat / 10])).
