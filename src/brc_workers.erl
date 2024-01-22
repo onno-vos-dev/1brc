@@ -41,6 +41,7 @@ do_handle_complete_chunk([City, Measurement | Others]) ->
 
 %% Very specialized float-parser for floats with a single fractional
 %% digit, and returns the result as an integer * 10.
+%% Credits to @Jesperes: https://github.com/jesperes/erlang_1brc/commit/7dc7eff0f158c8a666c24033f969f47a9f2a330e
 -define(TO_NUM(C), (C - $0)).
 
 parse_float(<<$-, A, B, $., C>>) ->
