@@ -2,8 +2,7 @@
 
 -export([start/2]).
 
--define(ONE_MB, 1048576).
--define(TWO_MB, ?ONE_MB * 2).
+-define(TWO_MB, 1024*1024*2).
 
 start(File, Pid) ->
   spawn_link(fun() ->
