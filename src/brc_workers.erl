@@ -27,8 +27,14 @@ worker() ->
 process_lines(<<>>, _) -> ok;
 process_lines(<<$;:8, Rest/binary>>, City) ->
   do_process_line(Rest, City);
-process_lines(<<C:8, Rest/binary>>, Acc) ->
-  process_lines(Rest, ?FNV32_HASH(Acc, C)).
+process_lines(<<C1:8, $;:8, Rest/binary>>, Acc) ->
+  do_process_line(Rest, ?FNV32_HASH(Acc, C1));
+process_lines(<<C1:8, C2:8, $;:8, Rest/binary>>, Acc) ->
+  do_process_line(Rest, ?FNV32_HASH(?FNV32_HASH(Acc, C1), C2));
+process_lines(<<C1:8, C2:8, C3:8, $;:8, Rest/binary>>, Acc) ->
+  do_process_line(Rest, ?FNV32_HASH(?FNV32_HASH(?FNV32_HASH(Acc, C1), C2), C3));
+process_lines(<<C1:8, C2:8, C3:8, C4:8, Rest/binary>>, Acc) ->
+  process_lines(Rest, ?FNV32_HASH(?FNV32_HASH(?FNV32_HASH(?FNV32_HASH(Acc, C1), C2), C3), C4)).
 
 %% Very specialized float-parser for floats with a single fractional
 %% digit, and returns the result as an integer * 10.
