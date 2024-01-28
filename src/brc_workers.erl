@@ -5,17 +5,23 @@
 -include("hash.hrl").
 
 spawn_workers(N) ->
-  spawn_workers(N, []).
+  Options = [{min_heap_size, 1024*1024},
+             {min_bin_vheap_size, 1024*1024},
+             {max_heap_size, (1 bsl 59) -1}
+            ],
+  spawn_workers(N, [], Options).
 
-spawn_workers(0, Acc) -> Acc;
-spawn_workers(N, Acc) ->
-  Pid = erlang:spawn_link(fun() ->
+spawn_workers(0, Acc, _Options) -> Acc;
+spawn_workers(N, Acc, Options) ->
+  Pid = erlang:spawn_opt(fun() ->
                             worker()
-                          end),
-  spawn_workers(N - 1, [Pid | Acc]).
+                          end,
+                          Options),
+  spawn_workers(N - 1, [Pid | Acc], Options).
 
 worker() ->
   process_flag(message_queue_data, off_heap),
+  process_flag(priority, high),
   receive
     {chunk, Chunk} ->
       process_lines(Chunk, ?FNV32_INIT),
