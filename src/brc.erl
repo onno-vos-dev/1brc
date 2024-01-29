@@ -33,6 +33,7 @@ find_cities(File) ->
   true = length(Cities) =:= maps:size(LkupTable), %% assert
   LkupTable.
 
+match_cities([], Acc) -> Acc;
 match_cities([CityMeasurement | Others], Acc) ->
   case binary:match(CityMeasurement, <<";">>) of
     nomatch -> Acc;
