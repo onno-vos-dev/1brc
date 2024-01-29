@@ -2,53 +2,64 @@
 
 -export([spawn_workers/1]).
 
-spawn_workers(N) ->
-  spawn_workers(N, []).
+-include("hash.hrl").
 
-spawn_workers(0, Acc) -> Acc;
-spawn_workers(N, Acc) ->
-  Pid = erlang:spawn(fun() -> worker() end),
-  spawn_workers(N - 1, [Pid | Acc]).
+spawn_workers(N) ->
+  Options = [{min_heap_size, 1024*1024},
+             {min_bin_vheap_size, 1024*1024},
+             {max_heap_size, (1 bsl 59) -1}
+            ],
+  spawn_workers(N, [], Options).
+
+spawn_workers(0, Acc, _Options) -> Acc;
+spawn_workers(N, Acc, Options) ->
+  Pid = erlang:spawn_opt(fun() ->
+                            worker()
+                          end,
+                          Options),
+  spawn_workers(N - 1, [Pid | Acc], Options).
 
 worker() ->
   process_flag(message_queue_data, off_heap),
+  process_flag(priority, high),
   receive
     {chunk, Chunk} ->
-      handle_complete_chunk(Chunk),
+      process_lines(Chunk, ?FNV32_INIT),
       worker();
     {Parent, no_more_work} ->
-      Parent ! {self(), worker_done, maps:from_list(get())},
-      exit(self(), kill)
+      Parent ! {self(), worker_done, maps:from_list(get())}
     end.
 
-handle_complete_chunk(Chunk) ->
-  Chunks = binary:split(Chunk, [<<";">>, <<"\n">>], [global]),
-  do_handle_complete_chunk(Chunks).
-
-do_handle_complete_chunk([]) ->
-  ok;
-do_handle_complete_chunk([<<>> | Others]) ->
-  do_handle_complete_chunk(Others);
-do_handle_complete_chunk([City, Measurement | Others]) ->
-  MeasurementFloat = parse_float(Measurement),
-  case get(City) of
-    undefined ->
-      put(City, {MeasurementFloat, MeasurementFloat, MeasurementFloat, 1});
-    {Min, Max, MeasurementAcc, N} ->
-      put(City, {min(Min, MeasurementFloat), max(Max, MeasurementFloat), MeasurementAcc + MeasurementFloat, N + 1})
-  end,
-  do_handle_complete_chunk(Others).
+process_lines(<<>>, _) -> ok;
+process_lines(<<$;:8, Rest/binary>>, City) ->
+  do_process_line(Rest, City);
+process_lines(<<C1:8, $;:8, Rest/binary>>, Acc) ->
+  do_process_line(Rest, ?FNV32_HASH(Acc, C1));
+process_lines(<<C1:8, C2:8, $;:8, Rest/binary>>, Acc) ->
+  do_process_line(Rest, ?FNV32_HASH(?FNV32_HASH(Acc, C1), C2));
+process_lines(<<C1:8, C2:8, C3:8, $;:8, Rest/binary>>, Acc) ->
+  do_process_line(Rest, ?FNV32_HASH(?FNV32_HASH(?FNV32_HASH(Acc, C1), C2), C3));
+process_lines(<<C1:8, C2:8, C3:8, C4:8, Rest/binary>>, Acc) ->
+  process_lines(Rest, ?FNV32_HASH(?FNV32_HASH(?FNV32_HASH(?FNV32_HASH(Acc, C1), C2), C3), C4)).
 
 %% Very specialized float-parser for floats with a single fractional
 %% digit, and returns the result as an integer * 10.
-%% Credits to @Jesperes: https://github.com/jesperes/erlang_1brc/commit/7dc7eff0f158c8a666c24033f969f47a9f2a330e
 -define(TO_NUM(C), (C - $0)).
+do_process_line(<<$-, A:8, B:8, $., C:8, $\n:8, Rest/binary>>, City) ->
+  add_to_state(Rest, City, -1 * (?TO_NUM(A) * 100 + ?TO_NUM(B) * 10 + ?TO_NUM(C)));
+do_process_line(<<$-, B:8, $., C:8, $\n:8, Rest/binary>>, City) ->
+  add_to_state(Rest, City, -1 * (?TO_NUM(B) * 10 + ?TO_NUM(C)));
+do_process_line(<<A:8, B:8, $., C:8, $\n:8, Rest/binary>>, City) ->
+  add_to_state(Rest, City, ?TO_NUM(A) * 100 + ?TO_NUM(B) * 10 + ?TO_NUM(C));
+do_process_line(<<B:8, $., C:8, $\n:8, Rest/binary>>, City) ->
+  add_to_state(Rest, City, ?TO_NUM(B) * 10 + ?TO_NUM(C)).
 
-parse_float(<<$-, A, B, $., C>>) ->
-  -1 * (?TO_NUM(A) * 100 + ?TO_NUM(B) * 10 + ?TO_NUM(C));
-parse_float(<<$-, B, $., C>>) ->
-  -1 * (?TO_NUM(B) * 10 + ?TO_NUM(C));
-parse_float(<<A, B, $., C>>) ->
-  ?TO_NUM(A) * 100 + ?TO_NUM(B) * 10 + ?TO_NUM(C);
-parse_float(<<B, $., C>>) ->
-  ?TO_NUM(B) * 10 + ?TO_NUM(C).
+add_to_state(<<Rest/binary>>, City, Measurement) ->
+  case get(City) of
+    undefined ->
+      put(City, {Measurement, Measurement, Measurement, 1}),
+      process_lines(Rest, ?FNV32_INIT);
+    {Min, Max, MeasurementAcc, N} ->
+      put(City, {min(Min, Measurement), max(Max, Measurement), MeasurementAcc + Measurement, N + 1}),
+      process_lines(Rest, ?FNV32_INIT)
+  end.
