@@ -1,6 +1,6 @@
 -module(brc).
 
--export([run/1]).
+-export([run/1, find_cities/1]).
 
 -include("hash.hrl").
 
