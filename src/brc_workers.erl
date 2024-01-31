@@ -24,7 +24,7 @@ worker() ->
   process_flag(priority, high),
   receive
     {chunk, Chunk} ->
-      process_lines(Chunk, ?FNV32_INIT),
+      process_lines(Chunk, ?INIT),
       worker();
     {Parent, no_more_work} ->
       Parent ! {self(), worker_done, maps:from_list(get())}
@@ -34,13 +34,13 @@ process_lines(<<>>, _) -> ok;
 process_lines(<<$;:8, Rest/binary>>, City) ->
   do_process_line(Rest, City);
 process_lines(<<C1:8, $;:8, Rest/binary>>, Acc) ->
-  do_process_line(Rest, ?FNV32_HASH(Acc, C1));
+  do_process_line(Rest, ?HASH(Acc, C1));
 process_lines(<<C1:8, C2:8, $;:8, Rest/binary>>, Acc) ->
-  do_process_line(Rest, ?FNV32_HASH(?FNV32_HASH(Acc, C1), C2));
+  do_process_line(Rest, ?HASH(?HASH(Acc, C1), C2));
 process_lines(<<C1:8, C2:8, C3:8, $;:8, Rest/binary>>, Acc) ->
-  do_process_line(Rest, ?FNV32_HASH(?FNV32_HASH(?FNV32_HASH(Acc, C1), C2), C3));
+  do_process_line(Rest, ?HASH(?HASH(?HASH(Acc, C1), C2), C3));
 process_lines(<<C1:8, C2:8, C3:8, C4:8, Rest/binary>>, Acc) ->
-  process_lines(Rest, ?FNV32_HASH(?FNV32_HASH(?FNV32_HASH(?FNV32_HASH(Acc, C1), C2), C3), C4)).
+  process_lines(Rest, ?HASH(?HASH(?HASH(?HASH(Acc, C1), C2), C3), C4)).
 
 %% Very specialized float-parser for floats with a single fractional
 %% digit, and returns the result as an integer * 10.
@@ -58,8 +58,8 @@ add_to_state(<<Rest/binary>>, City, Measurement) ->
   case get(City) of
     undefined ->
       put(City, {Measurement, Measurement, Measurement, 1}),
-      process_lines(Rest, ?FNV32_INIT);
+      process_lines(Rest, ?INIT);
     {Min, Max, MeasurementAcc, N} ->
       put(City, {min(Min, Measurement), max(Max, Measurement), MeasurementAcc + Measurement, N + 1}),
-      process_lines(Rest, ?FNV32_INIT)
+      process_lines(Rest, ?INIT)
   end.

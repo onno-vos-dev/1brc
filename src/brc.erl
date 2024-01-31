@@ -46,5 +46,19 @@ match_cities([CityMeasurement | Others], Acc) ->
       match_cities(Others, [binary:part(CityMeasurement, 0, Pos) | Acc])
   end.
 
-storage_key(City) ->
-  lists:foldl(fun(Char, Acc) -> ?FNV32_HASH(Acc, Char) end, ?FNV32_INIT, binary_to_list(City)).
+storage_key(Bin) ->
+  storage_key(Bin, ?INIT).
+
+storage_key(<<>>, Hash) ->
+  Hash;
+storage_key(<<C:8, T/binary>>, Hash) ->
+  storage_key(T, ?HASH(Hash, C)).
+
+-ifdef(EUNIT).
+
+-include_lib("eunit/include/eunit.hrl").
+
+special_strings_hash_test() ->
+  ?assertNotEqual(storage_key(<<"JiÔk">>), storage_key(<<"næðl">>)).
+
+-endif.
