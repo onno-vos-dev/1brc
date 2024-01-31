@@ -44,7 +44,13 @@ merge_maps(Map1, Map2) ->
 
 find_complete_chunk(Chunk) ->
   ByteSize = byte_size(Chunk),
-  {Start, _Length} = binary:match(rev_binary(binary:part(Chunk, ByteSize - 150, 150)), <<"\n">>),
+  {Start, _Length} =
+    case ByteSize >= 250 of
+      true ->
+        binary:match(rev_binary(binary:part(Chunk, ByteSize - 250, 250)), <<"\n">>);
+      false ->
+        binary:match(rev_binary(Chunk), <<"\n">>)
+    end,
   CompletePart = binary:part(Chunk, 0, ByteSize - Start),
   RemPart =  binary:part(Chunk, ByteSize - Start, Start),
   {CompletePart, RemPart}.
