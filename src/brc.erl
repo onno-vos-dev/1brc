@@ -1,6 +1,6 @@
 -module(brc).
 
--export([run/1]).
+-export([run/1, find_cities/1]).
 
 -include("hash.hrl").
 
@@ -26,11 +26,16 @@ round_back(IntFloat) ->
 
 find_cities(File) ->
   {ok, FD} = prim_file:open(File, [read, binary, raw, read_ahead]),
-  {ok, Data} = prim_file:read(FD, 1024*1024*2), %% Read two megabytes only
+  {ok, Data} = prim_file:read(FD, 1024*1024*20), %% Read twenty megabytes
   CityMeasurements = binary:split(Data, <<"\n">>, [global]),
   Cities = lists:usort(match_cities(CityMeasurements, [])),
   LkupTable = lists:foldl(fun(City, A) -> A#{storage_key(City) => City} end, #{}, Cities),
-  true = length(Cities) =:= maps:size(LkupTable), %% assert
+  case {length(Cities), maps:size(LkupTable)} of
+    {CL, ML} when CL =:= ML ->
+      ok;
+    {CL, ML} ->
+      throw({{num_cities, CL}, {num_lkuptable, ML}})
+  end,
   LkupTable.
 
 match_cities([], Acc) -> Acc;
@@ -41,5 +46,19 @@ match_cities([CityMeasurement | Others], Acc) ->
       match_cities(Others, [binary:part(CityMeasurement, 0, Pos) | Acc])
   end.
 
-storage_key(City) ->
-  lists:foldl(fun(Char, Acc) -> ?FNV32_HASH(Acc, Char) end, ?FNV32_INIT, binary_to_list(City)).
+storage_key(Bin) ->
+  storage_key(Bin, ?INIT).
+
+storage_key(<<>>, Hash) ->
+  Hash;
+storage_key(<<C:8, T/binary>>, Hash) ->
+  storage_key(T, ?HASH(Hash, C)).
+
+-ifdef(EUNIT).
+
+-include_lib("eunit/include/eunit.hrl").
+
+special_strings_hash_test() ->
+  ?assertNotEqual(storage_key(<<"JiÔk">>), storage_key(<<"næðl">>)).
+
+-endif.
