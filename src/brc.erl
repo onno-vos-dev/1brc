@@ -26,7 +26,7 @@ round_back(IntFloat) ->
 
 find_cities(File) ->
   {ok, FD} = prim_file:open(File, [read, binary, raw, read_ahead]),
-  {ok, Data} = prim_file:read(FD, 1024*1024*2), %% Read two megabytes only
+  {ok, Data} = prim_file:read(FD, 1024*1024*20), %% Read twenty megabytes
   CityMeasurements = binary:split(Data, <<"\n">>, [global]),
   Cities = lists:usort(match_cities(CityMeasurements, [])),
   LkupTable = lists:foldl(fun(City, A) -> A#{storage_key(City) => City} end, #{}, Cities),
