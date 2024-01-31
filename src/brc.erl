@@ -30,7 +30,12 @@ find_cities(File) ->
   CityMeasurements = binary:split(Data, <<"\n">>, [global]),
   Cities = lists:usort(match_cities(CityMeasurements, [])),
   LkupTable = lists:foldl(fun(City, A) -> A#{storage_key(City) => City} end, #{}, Cities),
-  true = length(Cities) =:= maps:size(LkupTable), %% assert
+  case {length(Cities), maps:size(LkupTable)} of
+    {CL, ML} when CL =:= ML ->
+      ok;
+    {CL, ML} ->
+      throw({{num_cities, CL}, {num_lkuptable, ML}})
+  end,
   LkupTable.
 
 match_cities([], Acc) -> Acc;
