@@ -1,14 +1,14 @@
 -module(brc).
 
--export([run/1, find_cities/1]).
+-export([run/1, find_cities/2]).
 
 -include("hash.hrl").
 
 run([File]) ->
-  LkupTable = find_cities(atom_to_list(File)),
   Workers = brc_workers:spawn_workers(erlang:system_info(logical_processors)),
   {Pid, Ref} = erlang:spawn_monitor(fun() -> exit({normal, brc_processor:start(Workers)}) end),
   brc_reader:start(File, Pid),
+  LkupTable = find_cities(atom_to_list(File), 1024*1024*2), %% 2MB should be enough :-)
   receive
     {'DOWN', Ref, process, Pid, {normal, Result}} ->
       [ exit(P, kill) || P <- Workers ],
@@ -24,41 +24,54 @@ format_output(Map, LkupTable) ->
 round_back(IntFloat) ->
   list_to_float(io_lib:format("~.1f", [IntFloat / 10])).
 
-find_cities(File) ->
+find_cities(File, Size) ->
   {ok, FD} = prim_file:open(File, [read, binary, raw, read_ahead]),
-  {ok, Data} = prim_file:read(FD, 1024*1024*20), %% Read twenty megabytes
-  CityMeasurements = binary:split(Data, <<"\n">>, [global]),
-  Cities = lists:usort(match_cities(CityMeasurements, [])),
-  LkupTable = lists:foldl(fun(City, A) -> A#{storage_key(City) => City} end, #{}, Cities),
-  case {length(Cities), maps:size(LkupTable)} of
-    {CL, ML} when CL =:= ML ->
-      ok;
-    {CL, ML} ->
-      throw({{num_cities, CL}, {num_lkuptable, ML}})
-  end,
-  LkupTable.
+  {ok, Data} = prim_file:read(FD, Size),
+  create_lookup_table(Data, #{}).
 
-match_cities([], Acc) -> Acc;
-match_cities([CityMeasurement | Others], Acc) ->
-  case binary:match(CityMeasurement, <<";">>) of
-    nomatch -> Acc;
-    {Pos, _Len} ->
-      match_cities(Others, [binary:part(CityMeasurement, 0, Pos) | Acc])
-  end.
+create_lookup_table(Bin, State) ->
+  create_lookup_table(Bin, State, {<<>>, ?INIT}).
 
-storage_key(Bin) ->
-  storage_key(Bin, ?INIT).
+create_lookup_table(<<C:8, $;:8, Rest/binary>> = Bin, State, {Raw, Acc}) ->
+  Str = binary:part(Bin, 0, 1),
+  do_create_lookup_table(Rest, State, {<<Raw/binary, Str/binary>>, ?HASH(Acc, C)});
+create_lookup_table(<<C:16, $;:8, Rest/binary>> = Bin, State, {Raw, Acc}) ->
+  Str = binary:part(Bin, 0, 2),
+  do_create_lookup_table(Rest, State, {<<Raw/binary, Str/binary>>, ?HASH(Acc, C)});
+create_lookup_table(<<C:24, $;:8, Rest/binary>> = Bin, State, {Raw, Acc}) ->
+  Str = binary:part(Bin, 0, 3),
+  do_create_lookup_table(Rest, State, {<<Raw/binary, Str/binary>>, ?HASH(Acc, C)});
+create_lookup_table(<<C:24, Rest/binary>> = Bin, State, {Raw, Acc}) ->
+  Str = binary:part(Bin, 0, 3),
+  create_lookup_table(Rest, State, {<<Raw/binary, Str/binary>>, ?HASH(Acc, C)});
+create_lookup_table(_, State, _) ->
+State.
 
-storage_key(<<>>, Hash) ->
-  Hash;
-storage_key(<<C:8, T/binary>>, Hash) ->
-  storage_key(T, ?HASH(Hash, C)).
+do_create_lookup_table(<<_:40, $\n:8, Rest/binary>>, State, {CityRaw, City}) ->
+  create_lookup_table(Rest, State#{City => CityRaw}, {<<>>, ?INIT});
+do_create_lookup_table(<<_:32, $\n:8, Rest/binary>>, State, {CityRaw, City}) ->
+  create_lookup_table(Rest, State#{City => CityRaw}, {<<>>, ?INIT});
+do_create_lookup_table(<<_:24, $\n:8, Rest/binary>>, State, {CityRaw, City}) ->
+  create_lookup_table(Rest, State#{City => CityRaw}, {<<>>, ?INIT});
+do_create_lookup_table(_, State, {CityRaw, City}) ->
+  State#{City => CityRaw}.
 
 -ifdef(EUNIT).
 
 -include_lib("eunit/include/eunit.hrl").
 
-special_strings_hash_test() ->
-  ?assertNotEqual(storage_key(<<"JiÔk">>), storage_key(<<"næðl">>)).
+all_cities_hasheable_test() ->
+  {CitiesL, Map} = create_lookup_table_from_all_cities(),
+  io:format("Cities1: ~p~n", [hd(lists:sort(CitiesL))]),
+  io:format("Map1: ~p~n", [hd(lists:sort(maps:values(Map)))]),
+  Keys = maps:keys(Map),
+  io:format("Smallest hash: ~p Biggest hash: ~p~n", [lists:min(Keys), lists:max(Keys)]),
+  io:format("Missing: ~p~n", [CitiesL -- maps:values(Map)]),
+  ?assertEqual(length(CitiesL), maps:size(Map)).
+
+create_lookup_table_from_all_cities() ->
+  {ok, CitiesBin} = file:read_file(code:lib_dir(brc) ++ "/test/" ++ "cities_with_population_1000.txt"),
+  CitiesL = binary:split(CitiesBin, <<"\n">>, [global]),
+  {CitiesL, lists:foldl(fun(City, Acc) -> create_lookup_table(<<City/binary, ";">>, Acc, {<<>>, ?INIT}) end, #{}, CitiesL)}.
 
 -endif.
