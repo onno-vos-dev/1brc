@@ -32,18 +32,17 @@ find_cities(File, Size) ->
 create_lookup_table(Bin, State) ->
   create_lookup_table(Bin, State, {<<>>, ?INIT}).
 
-create_lookup_table(<<C:8, $;:8, Rest/binary>> = Bin, State, {Raw, Acc}) ->
-  Str = binary:part(Bin, 0, 1),
-  do_create_lookup_table(Rest, State, {<<Raw/binary, Str/binary>>, ?HASH(Acc, C)});
+create_lookup_table(<<C:8, $;:8, Rest/binary>>, State, {Raw, Acc}) ->
+  do_create_lookup_table(Rest, State, {<<Raw/binary, C>>, ?HASH(Acc, C)});
 create_lookup_table(<<C:16, $;:8, Rest/binary>> = Bin, State, {Raw, Acc}) ->
-  Str = binary:part(Bin, 0, 2),
-  do_create_lookup_table(Rest, State, {<<Raw/binary, Str/binary>>, ?HASH(Acc, C)});
+  <<C1:8, C2:8, _/binary>> = Bin,
+  do_create_lookup_table(Rest, State, {<<Raw/binary, C1, C2>>, ?HASH(Acc, C)});
 create_lookup_table(<<C:24, $;:8, Rest/binary>> = Bin, State, {Raw, Acc}) ->
-  Str = binary:part(Bin, 0, 3),
-  do_create_lookup_table(Rest, State, {<<Raw/binary, Str/binary>>, ?HASH(Acc, C)});
+  <<C1:8, C2:8, C3:8, _/binary>> = Bin,
+  do_create_lookup_table(Rest, State, {<<Raw/binary, C1, C2, C3>>, ?HASH(Acc, C)});
 create_lookup_table(<<C:24, Rest/binary>> = Bin, State, {Raw, Acc}) ->
-  Str = binary:part(Bin, 0, 3),
-  create_lookup_table(Rest, State, {<<Raw/binary, Str/binary>>, ?HASH(Acc, C)});
+  <<C1:8, C2:8, C3:8, _/binary>> = Bin,
+  create_lookup_table(Rest, State, {<<Raw/binary, C1, C2, C3>>, ?HASH(Acc, C)});
 create_lookup_table(_, State, _) ->
 State.
 
