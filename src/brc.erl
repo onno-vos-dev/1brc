@@ -61,8 +61,6 @@ do_create_lookup_table(_, State, {CityRaw, City}) ->
 
 all_cities_hasheable_test() ->
   {CitiesL, Map} = create_lookup_table_from_all_cities(),
-  io:format("Cities1: ~p~n", [hd(lists:sort(CitiesL))]),
-  io:format("Map1: ~p~n", [hd(lists:sort(maps:values(Map)))]),
   Keys = maps:keys(Map),
   io:format("Smallest hash: ~p Biggest hash: ~p~n", [lists:min(Keys), lists:max(Keys)]),
   io:format("Missing: ~p~n", [CitiesL -- maps:values(Map)]),
