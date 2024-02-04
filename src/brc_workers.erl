@@ -3,6 +3,7 @@
 -export([spawn_workers/1]).
 
 -include("hash.hrl").
+-compile({inline, [do_process_line/2, add_to_state/3]}).
 
 spawn_workers(N) ->
   Options = [link,
@@ -31,17 +32,16 @@ worker() ->
       Parent ! {self(), worker_done, maps:from_list(get())}
     end.
 
-process_lines(<<>>, _) -> ok;
-process_lines(<<$;:8, Rest/binary>>, City) ->
-  do_process_line(Rest, City);
-process_lines(<<C1:8, $;:8, Rest/binary>>, Acc) ->
-  do_process_line(Rest, ?HASH(Acc, C1));
-process_lines(<<C1:8, C2:8, $;:8, Rest/binary>>, Acc) ->
-  do_process_line(Rest, ?HASH(?HASH(Acc, C1), C2));
-process_lines(<<C1:8, C2:8, C3:8, $;:8, Rest/binary>>, Acc) ->
-  do_process_line(Rest, ?HASH(?HASH(?HASH(Acc, C1), C2), C3));
-process_lines(<<C1:8, C2:8, C3:8, C4:8, Rest/binary>>, Acc) ->
-  process_lines(Rest, ?HASH(?HASH(?HASH(?HASH(Acc, C1), C2), C3), C4)).
+process_lines(<<>>, _) ->
+  ok;
+process_lines(<<C:8, $;:8, Rest/binary>>, Acc) ->
+  do_process_line(Rest, ?HASH(Acc, C));
+process_lines(<<C:16, $;:8, Rest/binary>>, Acc) ->
+  do_process_line(Rest, ?HASH(Acc, C));
+process_lines(<<C:24, $;:8, Rest/binary>>, Acc) ->
+  do_process_line(Rest, ?HASH(Acc, C));
+process_lines(<<C:24, Rest/binary>>, Acc) ->
+  process_lines(Rest, ?HASH(Acc, C)).
 
 %% Very specialized float-parser for floats with a single fractional
 %% digit, and returns the result as an integer * 10.
