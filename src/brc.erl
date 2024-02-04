@@ -19,7 +19,7 @@ run([File]) ->
 
 format_output(Map, LkupTable) ->
   Fmts = lists:map(fun({K, {Min, Max, MeasurementsAcc, N}}) -> io_lib:format("~ts=~p/~p/~p", [maps:get(K, LkupTable), round_back(Min), round_back(Max), round_back(MeasurementsAcc / N)]) end, maps:to_list(Map)),
-  "{" ++ lists:join(", ", Fmts) ++ "}".
+  "{" ++ lists:join(", ", lists:sort(Fmts)) ++ "}".
 
 round_back(IntFloat) ->
   list_to_float(io_lib:format("~.1f", [IntFloat / 10])).
