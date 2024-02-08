@@ -2,29 +2,46 @@
 
 -export([start/2]).
 
--define(TWO_MB, 1024*1024*2).
+-define(ONE_MB, 1024*1024*10).
 
-start(File, Pid) ->
+start(File0, Pid) ->
   spawn_link(fun() ->
-               read_loop(atom_to_list(File), Pid, 0, undefined, ?TWO_MB)
+                File = atom_to_list(File0),
+                FileSize = filelib:file_size(File),
+                read_loop(File, Pid, 0, undefined, {0, ?ONE_MB, FileSize})
              end).
 
-read_loop(File, Pid, 0, undefined, Size) ->
+read_loop(File, Pid, 0, undefined, {N, ChunkSize, FileSize}) ->
+  Start = erlang:monotonic_time(),
+  put(start, Start),
   {ok, FD} = prim_file:open(File, [read, binary, raw, read_ahead]),
-  read_loop(File, Pid, 0, FD, Size);
-read_loop(File, Pid, Offset, FD, Size) ->
-  {NewOffset, OffsetSizes} = lists:foldl(fun(_, {O, Acc}) -> {O + Size, [{O, Size} | Acc]} end, {Offset, []}, lists:seq(1,5)),
-  {ok, Data} = prim_file:pread(FD, lists:reverse(OffsetSizes)),
-  case send_data(Data, Pid) of
+  read_loop(File, Pid, 0, FD, {N, ChunkSize, FileSize});
+read_loop(File, Pid, Offset, FD, {N, ChunkSize, FileSize}) when N =< 10 ->
+  case read_and_send(FD, Offset, ChunkSize, Pid) of
     eof ->
-      prim_file:close(FD),
-      Pid ! done;
-    ok ->
-      read_loop(File, Pid, NewOffset, FD, Size)
+      ok;
+    continue ->
+      read_loop(File, Pid, Offset + ChunkSize, FD, {N + 1, ChunkSize, FileSize})
+  end;
+read_loop(File, Pid, Offset, FD, {N, _ChunkSize, FileSize}) when N > 10 ->
+  NewChunkSize = FileSize div 100,
+  case read_and_send(FD, Offset, NewChunkSize, Pid) of
+    eof ->
+      ok;
+    continue ->
+      read_loop(File, Pid, Offset + NewChunkSize, FD, {N + 1, NewChunkSize, FileSize})
   end.
 
-send_data([], _Pid) -> ok;
-send_data([eof | _], _Pid) -> eof;
-send_data([Data | Rest], Pid) ->
-  Pid ! {chunk, Data},
-  send_data(Rest, Pid).
+read_and_send(FD, Offset, Size, Pid) ->
+  case prim_file:pread(FD, Offset, Size) of
+    eof ->
+      prim_file:close(FD),
+      Now = erlang:monotonic_time(),
+      Start = get(start),
+      io:format("Sending all data took: ~p~n", [(Now - Start) / 1000_000_000.0]),
+      Pid ! done,
+      eof;
+    {ok, Data} ->
+      Pid ! {chunk, Data},
+      continue
+  end.
