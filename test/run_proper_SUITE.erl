@@ -79,6 +79,7 @@ run([File]) ->
   %% Just read all the cities into LkupTable. PropEr generates some really weird
   %% City;Float pairs and it's not representative of what the Java generator does
   LkupTable = brc:find_cities(atom_to_list(File), filelib:file_size(File)),
+  generate_brc_workers:generate_and_compile(LkupTable),
   Workers = brc_workers:spawn_workers(erlang:system_info(logical_processors)),
   {Pid, Ref} = erlang:spawn_monitor(fun() -> exit({normal, brc_processor:start(Workers)}) end),
   brc_reader:start(File, Pid),
